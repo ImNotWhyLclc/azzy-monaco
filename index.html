@@ -139,15 +139,24 @@
       position: relative;
       background: #141414;
     }
-    .editor-instance {
+    .editor-wrapper {
       position: absolute;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
+      border-radius: 15px;        /* change to adjust roundness */
+      overflow: hidden;           /* required for Monaco */
+      border: 1px solid #FF6B35; /* border color */
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5); /* optional shadow */
       display: none;
+      transition: box-shadow 0.2s;
+      background: #141414;
     }
-    .editor-instance.active {
+    .editor-wrapper:hover {
+      box-shadow: 0 6px 15px rgba(0,0,0,0.6);
+    }
+    .editor-wrapper.active {
       display: block;
       z-index: 1;
     }
@@ -179,6 +188,7 @@
     <button class="add-tab" id="addTabBtn"><i class="fas fa-plus"></i></button>
   </nav>
   <div id="editors-container"></div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
   <script>
     let models = {}, editors = {}, activeTab = null, fileCounter = 1, monacoInstance;
@@ -186,6 +196,7 @@
     window.editors = editors;
     const tabsContainer = document.getElementById('tabs');
     const editorsContainer = document.getElementById('editors-container');
+
     require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
     require(['vs/editor/editor.main'], () => {
       monacoInstance = monaco;
@@ -198,20 +209,25 @@
           'editor.foreground': '#ffffff'
         }
       });
-    addNewTab('main.lua');
-    restoreTabs();
+      addNewTab('main.lua');
+      restoreTabs();
     });
+
     function addNewTab(name) {
       const filename = name || `main${fileCounter++}.lua`;
       const model = monacoInstance.editor.createModel(`print("#flareStillGoated")
 --peace out guys -remzy
 --goodbye remzy! -austin`, 'lua');
       models[filename] = model;
-      const editorDiv = document.createElement('div');
-      editorDiv.id = `editor-${filename}`;
-      editorDiv.className = 'editor-instance';
-      editorsContainer.appendChild(editorDiv);
-      editors[filename] = monacoInstance.editor.create(editorDiv, {
+
+      // create wrapper div
+      const wrapper = document.createElement('div');
+      wrapper.id = `editor-${filename}`;
+      wrapper.className = 'editor-wrapper';
+      editorsContainer.appendChild(wrapper);
+
+      // create Monaco inside wrapper
+      editors[filename] = monacoInstance.editor.create(wrapper, {
         model: model,
         theme: 'darkRedTheme',
         fontSize: 15,
@@ -220,9 +236,11 @@
         smoothScrolling: true,
         cursorSmoothCaretAnimation: true
       });
+
       createTab(filename);
       switchTab(filename);
     }
+
     function createTab(filename) {
       const tab = document.createElement('button');
       tab.dataset.file = filename;
@@ -236,23 +254,16 @@
       const closeBtn = document.createElement('span');
       closeBtn.className = 'close-btn';
       closeBtn.innerHTML = '&times;';
-      closeBtn.onclick = e => {
-        e.stopPropagation();
-        closeTab(filename, tab);
-      };
+      closeBtn.onclick = e => { e.stopPropagation(); closeTab(filename, tab); };
       tabContent.appendChild(icon);
       tabContent.appendChild(label);
       tab.appendChild(tabContent);
       tab.appendChild(closeBtn);
-      tab.onclick = () => {
-        if (!tab.querySelector('input.rename-input')) switchTab(filename);
-      };
-      tab.ondblclick = e => {
-        e.stopPropagation();
-        renameTab(tab, label);
-      };
+      tab.onclick = () => { if (!tab.querySelector('input.rename-input')) switchTab(filename); };
+      tab.ondblclick = e => { e.stopPropagation(); renameTab(tab, label); };
       tabsContainer.insertBefore(tab, document.getElementById('addTabBtn'));
     }
+
     function renameTab(tab, labelElement) {
       const currentName = tab.dataset.file;
       const input = document.createElement('input');
@@ -267,15 +278,14 @@
         if (e.key === 'Escape') input.replaceWith(labelElement);
       };
     }
+
     function finishRename(input, tab, oldName) {
       const newName = input.value.trim();
       if (!newName || models[newName]) return input.replaceWith(document.createTextNode(oldName));
-      models[newName] = models[oldName];
-      delete models[oldName];
-      editors[newName] = editors[oldName];
-      delete editors[oldName];
-      const div = document.getElementById(`editor-${oldName}`);
-      div.id = `editor-${newName}`;
+      models[newName] = models[oldName]; delete models[oldName];
+      editors[newName] = editors[oldName]; delete editors[oldName];
+      const wrapper = document.getElementById(`editor-${oldName}`);
+      wrapper.id = `editor-${newName}`;
       tab.dataset.file = newName;
       const label = document.createElement('span');
       label.className = 'tab-label';
@@ -283,29 +293,21 @@
       input.replaceWith(label);
       switchTab(newName);
     }
+
     function switchTab(filename) {
       if (!models[filename]) return;
       activeTab = filename;
-      [...tabsContainer.children].forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.file === filename);
-      });
-      [...editorsContainer.children].forEach(div => {
-        div.classList.remove('active');
-      });
+      [...tabsContainer.children].forEach(tab => tab.classList.toggle('active', tab.dataset.file === filename));
+      [...editorsContainer.children].forEach(div => div.classList.remove('active'));
       const activeDiv = document.getElementById(`editor-${filename}`);
       if (activeDiv) activeDiv.classList.add('active');
     }
+
     function closeTab(filename, tab) {
       tab.classList.add('closing');
       setTimeout(() => tab.remove(), 300);
-      if (editors[filename]) {
-        editors[filename].dispose();
-        delete editors[filename];
-      }
-      if (models[filename]) {
-        models[filename].dispose();
-        delete models[filename];
-      }
+      if (editors[filename]) { editors[filename].dispose(); delete editors[filename]; }
+      if (models[filename]) { models[filename].dispose(); delete models[filename]; }
       document.getElementById(`editor-${filename}`)?.remove();
       if (activeTab === filename) {
         const remaining = Object.keys(models);
@@ -313,31 +315,28 @@
         else activeTab = null;
       }
     }
+
     document.getElementById('addTabBtn').onclick = () => addNewTab();
     window.getEditorValue = () => activeTab ? editors[activeTab].getValue() : '';
-    window.setEditorValue = content => {
-      if (activeTab) editors[activeTab].setValue(content);
-    };
+    window.setEditorValue = content => { if (activeTab) editors[activeTab].setValue(content); };
+
     function saveTabs() {
-  	const data = Object.keys(models).map(name => ({
-    	name,
-    content: models[name].getValue()
-  }));
-  localStorage.setItem("savedTabs", JSON.stringify(data));
-  }
-function restoreTabs() {
-  const saved = localStorage.getItem("savedTabs");
-  if (!saved) return;
-
-  JSON.parse(saved).forEach(t => {
-    if (!models[t.name]) {
-      addNewTab(t.name);
-      models[t.name].setValue(t.content);
+      const data = Object.keys(models).map(name => ({ name, content: models[name].getValue() }));
+      localStorage.setItem("savedTabs", JSON.stringify(data));
     }
-  });
-}
 
-setInterval(saveTabs, 1500);
+    function restoreTabs() {
+      const saved = localStorage.getItem("savedTabs");
+      if (!saved) return;
+      JSON.parse(saved).forEach(t => {
+        if (!models[t.name]) {
+          addNewTab(t.name);
+          models[t.name].setValue(t.content);
+        }
+      });
+    }
+
+    setInterval(saveTabs, 1500);
   </script>
 </body>
 </html>
